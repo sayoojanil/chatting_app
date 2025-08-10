@@ -163,6 +163,26 @@
             text-align: center;
         }
         
+        .system-message-connected {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
+            animation: pulse 1s ease-in-out;
+        }
+        
+        .system-message-disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+            border: 1px solid var(--error);
+            animation: pulse 1s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
         .typing-indicator {
             background: rgba(203, 213, 225, 0.3);
             color: var(--text-secondary);
@@ -607,9 +627,6 @@
             <button class="send-button" onclick="sendMessage()">
                 <i class="fas fa-paper-plane"></i> Send
             </button>
-            <button class="send-button" style="padding:0.75rem" onclick="document.getElementById('imageInput').click()">
-                <i class="fas fa-image"></i>
-            </button>
         </div>
         <div id="userNameDisplay" class="user-name-display hidden">
             <i class="fas fa-user"></i> <span id="userNameText"></span>
@@ -643,7 +660,13 @@
                 messages.forEach(msg => {
                     const id = msg.id || '';
                     if (msg.type === 'system') {
-                        addSystemMessage(msg.message);
+                        let messageType = 'default';
+                        if (msg.message.includes('Connected to chat!')) {
+                            messageType = 'connected';
+                        } else if (msg.message.includes('Disconnected from chat.') || msg.message.includes('You have logged out.')) {
+                            messageType = 'disconnected';
+                        }
+                        addSystemMessage(msg.message, messageType);
                     } else if (msg.type === 'image') {
                         addImageMessage(msg.sender, msg.image, msg.sender === username, id);
                     } else {
@@ -656,7 +679,7 @@
         function sendImage(event) {
             const file = event.target.files[0];
             if (!file || !socket.connected) {
-                addSystemMessage('Cannot send image: Not connected to server or no file selected.');
+                addSystemMessage('Cannot send image: Not connected to server or no file selected.', 'default');
                 return;
             }
 
@@ -725,12 +748,12 @@
             
             loadMessages();
             
-            socket = io('http://127.0.0.1:3000/');
+            socket = io('https://chat-server-gs4g.onrender.com/');
             
             socket.on('connect', () => {
                 console.log('Connected to Socket.IO');
                 const systemMessage = { type: 'system', message: 'Connected to chat!' };
-                addSystemMessage(systemMessage.message);
+                addSystemMessage(systemMessage.message, 'connected');
                 saveMessage(systemMessage);
                 socket.emit('join', username);
                 document.getElementById('statusText').textContent = 'Online';
@@ -739,7 +762,7 @@
             socket.on('connect_error', (err) => {
                 console.log('Connection error:', err.message);
                 const systemMessage = { type: 'system', message: 'Failed to connect to server: ' + err.message };
-                addSystemMessage(systemMessage.message);
+                addSystemMessage(systemMessage.message, 'disconnected');
                 saveMessage(systemMessage);
                 document.getElementById('statusText').textContent = 'Offline';
             });
@@ -794,7 +817,7 @@
             socket.on('disconnect', () => {
                 console.log('Disconnected from Socket.IO');
                 const systemMessage = { type: 'system', message: 'Disconnected from chat.' };
-                addSystemMessage(systemMessage.message);
+                addSystemMessage(systemMessage.message, 'disconnected');
                 saveMessage(systemMessage);
                 document.getElementById('statusText').textContent = 'Offline';
                 document.getElementById('userNameDisplay').classList.add('hidden');
@@ -818,7 +841,7 @@
                 }
             } else if (!socket.connected) {
                 const systemMessage = { type: 'system', message: 'Cannot send message: Not connected to server.' };
-                addSystemMessage(systemMessage.message);
+                addSystemMessage(systemMessage.message, 'disconnected');
                 saveMessage(systemMessage);
             }
         }
@@ -835,7 +858,7 @@
             document.getElementById('username').focus();
             document.getElementById('userNameDisplay').classList.add('hidden');
             const systemMessage = { type: 'system', message: 'You have logged out.' };
-            addSystemMessage(systemMessage.message);
+            addSystemMessage(systemMessage.message, 'disconnected');
             saveMessage(systemMessage);
         }
 
@@ -866,13 +889,30 @@
             messages.scrollTop = messages.scrollHeight;
         }
 
-        function addSystemMessage(message) {
+        function addSystemMessage(message, messageType = 'default') {
             const messages = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'system-message';
-            messageDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${message}`;
+            if (messageType === 'connected') {
+                messageDiv.classList.add('system-message-connected');
+                messageDiv.innerHTML = `<i class="fas fa-plug"></i> ${message}`;
+            } else if (messageType === 'disconnected') {
+                messageDiv.classList.add('system-message-disconnected');
+                messageDiv.innerHTML = `<i class="fas fa-power-off"></i> ${message}`;
+            } else {
+                messageDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${message}`;
+            }
             messages.appendChild(messageDiv);
             messages.scrollTop = messages.scrollHeight;
+            if (messageType === 'connected' || messageType === 'disconnected') {
+                setTimeout(() => {
+                    messageDiv.style.transition = 'opacity 0.5s ease';
+                    messageDiv.style.opacity = '0';
+                    setTimeout(() => {
+                        messageDiv.remove();
+                    }, 500);
+                }, 3000);
+            }
         }
 
         function updateTypingIndicator() {
